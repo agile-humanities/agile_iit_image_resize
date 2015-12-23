@@ -1,0 +1,8 @@
+name = Agile Humanities IIT Image Resize
+description = Image Manipulation presets
+core = 7.x
+dependencies[] = entity
+dependencies[] = file_entity
+dependencies[] = media
+package = Agile Humanities
+version = 7.x-1.1

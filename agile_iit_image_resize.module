@@ -1,0 +1,220 @@
+<?php
+
+
+/**
+ * Implements hook_image_effect_info().
+ */
+function agile_iit_image_resize_image_effect_info() {
+  $effects = array();
+
+  $effects['scale_from_data'] = array(
+    'label' => t('Scale with field data'),
+    'help' => t('Resize an image using data in the host entity, making a scaled-to-life representation.'),
+    'effect callback' => 'agile_iit_image_resize_resize_effect',
+    'dimensions callback' => 'agile_iit_image_resize_resize_dimensions',
+    'form callback' => 'agile_iit_image_resize_resize_form',
+    'summary theme' => 'agile_iit_image_resize_resize_summary',
+  );
+
+  return $effects;
+}
+
+function agile_iit_image_resize_resize_form($data) {
+  module_load_include('inc', 'agile_iit_image_resize', 'includes/utilities');
+  $form = array();
+  $fields = agile_iit_image_resize_get_number_fields();
+  if (isset($data['host_entity'])) {
+    if (array_key_exists($data['host_entity'], field_info_bundles('node'))) {
+      $fields = agile_iit_image_resize_get_number_fields($data['host_entity']);
+    }
+  }
+
+  $types = agile_iit_image_resize_get_candidates();
+  $form['host_entity'] = array(
+    // select, with options from existing content types.
+    '#type' => 'select',
+    '#options' => $types,
+    '#title' => 'Host entity type',
+    '#description' => t('Only entity types with number fields are shown.'),
+    '#required' => TRUE,
+    '#default_value' => isset($data['host_entity']) ? $data['host_entity'] : '',
+    '#ajax' => array(
+      'wrapper' => 'width-field',
+      'callback' => 'agile_iit_image_resize_refresh_fields_callback',
+      'method' => 'replace',
+      'effect' => 'fade',
+    ),
+  );
+  $default_width_field = NULL;
+  $default_height_field = NULL;
+  $default_diameter_field = NULL;
+  foreach ($fields as $key => $value) {
+    $test_string = strtolower($value);
+    if (strpos($test_string, 'width') !== FALSE) {
+      $default_width_field = $key;
+    }
+    if (strpos($test_string, 'height') !== FALSE) {
+      $default_height_field = $key;
+    }
+    if (strpos($test_string, 'diameter') !== FALSE) {
+      $default_diameter_field = $key;
+    }
+  }
+  $form['dimensions'] = array(
+    '#title' => t('Physical dimensions of original object'),
+    '#type' => 'fieldset',
+  );
+  $form['dimensions']['width_field'] = array(
+    // select, with fields from fields in host_entity.
+    '#type' => 'select',
+    '#options' => $fields,
+    '#title' => t('Width field'),
+    '#prefix' => '<div id="width-field">',
+    '#suffix' => '</div>',
+    '#default_value' => isset($data['width_field']) ? $data['width_field'] : $default_width_field,
+  );
+
+  $form['dimensions']['height_field'] = array(
+    // select, with fields from fields in host_entity.
+    '#type' => 'select',
+    '#options' => $fields,
+    '#title' => t('Height field'),
+    '#prefix' => '<div id="height-field">',
+    '#suffix' => '</div>',
+    '#default_value' => isset($data['height_field']) ? $data['height_field'] : $default_height_field,
+  );
+  $form['dimensions']['diameter_field'] = array(
+    // select, with fields from fields in host_entity.
+    '#type' => 'select',
+    '#options' => $fields,
+    '#title' => t('Diameter field'),
+    '#prefix' => '<div id="diameter-field">',
+    '#suffix' => '</div>',
+    '#default_value' => isset($data['diameter_field']) ? $data['diameter_field'] : $default_diameter_field,
+  );
+  $form['default_width'] = array(
+    // select, with fields from host_entity.
+    '#type' => 'textfield',
+    '#title' => t('Default width'),
+    '#default_value' => isset($data['default_width']) ? $data['default_width'] : '',
+    '#description' => 'If the value in the field above is not available, assume the image has this actual width.',
+    '#field_suffix' => ' ' . t('cm'),
+    '#required' => TRUE,
+    '#size' => 10,
+    '#allow_negative' => FALSE,
+  );
+  $form['scale_factor'] = array(
+    // select, with fields from host_entity.
+    '#type' => 'textfield',
+    '#title' => t('Scaling Factor'),
+    '#default_value' => isset($data['scale_factor']) ? $data['scale_factor'] : '',
+    '#field_suffix' => ' ' . t('pixels per cm'),
+    '#required' => TRUE,
+    '#size' => 10,
+    '#allow_negative' => FALSE,
+  );
+  return $form;
+  // $data is empty.
+}
+
+function agile_iit_image_resize_resize_effect(&$image, $data) {
+  module_load_include('inc', 'agile_iit_image_resize', 'includes/utilities');
+  $file = file_uri_to_object($image->source);
+  $parent_nid = NULL;
+  if ($file && isset($file->fid)) {
+    $objects = file_usage_list($file);
+    if (isset($objects['file']) and isset($objects['file']['node'])) {
+      foreach ($objects['file']['node'] as $nid => $count) {
+        if ($parent_nid === NULL) {
+          if (agile_iit_image_resize_has_number_type($parent_nid)) {
+            $parent_nid = $nid;
+          }
+        }
+        elseif ($nid < $parent_nid) {
+          $parent_nid = $nid;
+        }
+      }
+    }
+  }
+  $physical_width = NULL;
+  $physical_height = NULL;
+  $scaled_height = NULL;
+  $scaled_width = NULL;
+  if ($parent_nid) {
+    $parent_node = node_load($parent_nid);
+    if ($parent_node) {
+      $wrapper = entity_metadata_wrapper('node', $parent_node);
+    }
+    if ($wrapper && property_exists($parent_node, $data['width_field'])) {
+      $physical_width = $wrapper->{$data['width_field']}->value();
+    }
+    if ($wrapper && property_exists($parent_node, $data['height_field'])) {
+      $physical_height = $wrapper->{$data['height_field']}->value();
+    }
+    if ($wrapper && property_exists($parent_node, $data['diameter_field'])) {
+      $physical_height = $wrapper->{$data['diameter_field']}->value();
+    }
+  }
+  if ($physical_width) {
+    $scaled_width = $physical_width * $data['scale_factor'];
+  }
+  if ($physical_height) {
+    $scaled_height = $physical_height * $data['scale_factor'];
+  }
+  // Compute missing dimension, if possible.
+  if (!$physical_width && $scaled_height) {
+    $scaled_width = $image->info['width'] / $image->info['height'] * $scaled_height;
+  }
+  if (!$physical_height && $scaled_width) {
+    $scaled_height = $image->info['height'] / $image->info['width'] * $scaled_width;
+  }
+  // USe defaults if  no dimensions are available.
+  if (!$physical_height && !$physical_width) {
+    $scaled_width = $data['default_width'] * $data['scale_factor'];
+    $scaled_height = $scaled_width * $image->info['height'] / $image->info['width'];
+  }
+  if (!image_resize($image, $scaled_width, $scaled_height)) {
+    watchdog('image', 'Image resize failed using the %toolkit toolkit on %path (%mimetype, %dimensions)', array('%toolkit' => $image->toolkit, '%path' => $image->source, '%mimetype' => $image->info['mime_type'], '%dimensions' => $image->info['width'] . 'x' . $image->info['height']), WATCHDOG_ERROR);
+    return FALSE;
+  }
+  return TRUE;
+}
+
+/**
+ * Returns HTML for a summary of an image resize effect.
+ *
+ * @param $variables
+ *   An associative array containing:
+ *   - data: The current configuration for this resize effect.
+ *
+ * @ingroup themeable
+ */
+function theme_agile_iit_image_resize_resize_summary($variables) {
+  // This is copied verbatim from the vanilla resize. Fixme when we know what should be here.
+  $data = $variables['data'];
+
+  if ($data['width'] && $data['height']) {
+    return check_plain($data['width']) . 'x' . check_plain($data['height']);
+  }
+  else {
+    return ($data['width']) ? t('width @width', array('@width' => $data['width'])) : t('height @height', array('@height' => $data['height']));
+  }
+}
+
+/**
+ * AJAX Callback.
+ *
+ * @param array $form
+ *   Drupal form
+ * @param array $form_state
+ *   Drupal form state
+ * 
+ * @return string
+ *   Width field
+ */
+function agile_iit_image_resize_refresh_fields_callback($form, &$form_state) {
+  $host_entity_type = !empty($form_state['values']['data']['host_entity']) ? $form_state['values']['data']['host_entity'] : NULL;
+  $fields_available = agile_iit_image_resize_get_number_fields($host_entity_type);
+  $form['data']['width_field']['#options'] = $fields_available;
+  return $form['data']['width_field'];
+}
