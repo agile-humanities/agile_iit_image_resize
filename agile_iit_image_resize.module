@@ -11,7 +11,6 @@ function agile_iit_image_resize_image_effect_info() {
     'label' => t('Scale with field data'),
     'help' => t('Resize an image using data in the host entity, making a scaled-to-life representation.'),
     'effect callback' => 'agile_iit_image_resize_resize_effect',
-    'dimensions callback' => 'agile_iit_image_resize_resize_dimensions',
     'form callback' => 'agile_iit_image_resize_resize_form',
     'summary theme' => 'agile_iit_image_resize_resize_summary',
   );
@@ -114,9 +113,14 @@ function agile_iit_image_resize_resize_form($data) {
     '#allow_negative' => FALSE,
   );
   return $form;
-  // $data is empty.
 }
-
+// DEPRECATED. Unless i can find a way to get info about the image itself here.
+ function agile_iit_resize_dimensions(array &$dimensions, array $data) {
+  // The new image will have the exact dimensions defined for the effect. Data contains all the settings that i entered for the effect. dims are the original dimensions.
+  //$dimensions['width'] = $data['width']; // this runs first.
+  $dimensions['height'] = 150;
+   $a = 3; //breakpoint
+ }
 function agile_iit_image_resize_resize_effect(&$image, $data) {
   module_load_include('inc', 'agile_iit_image_resize', 'includes/utilities');
   $file = file_uri_to_object($image->source);
