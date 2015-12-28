@@ -64,8 +64,11 @@ function agile_iit_image_resize_get_number_fields($entity_type = NULL) {
  * @return bool
  *   True if node type has number field
  */
-function agile_iit_has_number_type($nid) {
+function agile_iit_image_resize_has_number_type($nid) {
   $node = node_load($nid);
-  $candidates = agile_iit_get_number_fields($node->type);
-  return count($candidates) > 0;
+  if ($node) {
+    $candidates = agile_iit_image_resize_get_number_fields($node->type);
+    return count($candidates) > 0;
+  }
+  return FALSE;
 }

@@ -1,6 +1,5 @@
 <?php
 
-
 /**
  * Implements hook_image_effect_info().
  */
@@ -11,6 +10,7 @@ function agile_iit_image_resize_image_effect_info() {
     'label' => t('Scale with field data'),
     'help' => t('Resize an image using data in the host entity, making a scaled-to-life representation.'),
     'effect callback' => 'agile_iit_image_resize_resize_effect',
+    //'dimensions callback' => 'agile_iit_image_resize_resize_dimensions',
     'form callback' => 'agile_iit_image_resize_resize_form',
     'summary theme' => 'agile_iit_image_resize_resize_summary',
   );
@@ -18,6 +18,15 @@ function agile_iit_image_resize_image_effect_info() {
   return $effects;
 }
 
+/**
+ * Returns partial form to image module.
+ *
+ * @param array $data
+ * associative array of data from image effect
+ *
+ * @return array
+ *   partial form definitions
+ */
 function agile_iit_image_resize_resize_form($data) {
   module_load_include('inc', 'agile_iit_image_resize', 'includes/utilities');
   $form = array();
@@ -114,13 +123,18 @@ function agile_iit_image_resize_resize_form($data) {
   );
   return $form;
 }
-// DEPRECATED. Unless i can find a way to get info about the image itself here.
- function agile_iit_resize_dimensions(array &$dimensions, array $data) {
-  // The new image will have the exact dimensions defined for the effect. Data contains all the settings that i entered for the effect. dims are the original dimensions.
-  //$dimensions['width'] = $data['width']; // this runs first.
-  $dimensions['height'] = 150;
-   $a = 3; //breakpoint
- }
+
+/**
+ * Callback function to resize image.
+ * 
+ * @param image $image
+ *   Original image
+ * @param array $data
+ *   Associative array of image manipulation parameters
+ *
+ * @return bool
+ *   Success of image transformation
+ */
 function agile_iit_image_resize_resize_effect(&$image, $data) {
   module_load_include('inc', 'agile_iit_image_resize', 'includes/utilities');
   $file = file_uri_to_object($image->source);
@@ -130,7 +144,7 @@ function agile_iit_image_resize_resize_effect(&$image, $data) {
     if (isset($objects['file']) and isset($objects['file']['node'])) {
       foreach ($objects['file']['node'] as $nid => $count) {
         if ($parent_nid === NULL) {
-          if (agile_iit_image_resize_has_number_type($parent_nid)) {
+          if (agile_iit_image_resize_has_number_type($nid)) {
             $parent_nid = $nid;
           }
         }
@@ -149,14 +163,21 @@ function agile_iit_image_resize_resize_effect(&$image, $data) {
     if ($parent_node) {
       $wrapper = entity_metadata_wrapper('node', $parent_node);
     }
-    if ($wrapper && property_exists($parent_node, $data['width_field'])) {
-      $physical_width = $wrapper->{$data['width_field']}->value();
+    if ($wrapper && property_exists($parent_node, $data['dimensions']['width_field'])) {
+      if ($wrapper->{$data['dimensions']['width_field']}->value()) {
+        $physical_width = $wrapper->{$data['dimensions']['width_field']}->value();
+      }
     }
-    if ($wrapper && property_exists($parent_node, $data['height_field'])) {
-      $physical_height = $wrapper->{$data['height_field']}->value();
+    if ($wrapper && property_exists($parent_node, $data['dimensions']['height_field'])) {
+      if ($wrapper->{$data['dimensions']['height_field']}->value()) {
+        $physical_height = $wrapper->{$data['dimensions']['height_field']}->value();
+      }
     }
-    if ($wrapper && property_exists($parent_node, $data['diameter_field'])) {
-      $physical_height = $wrapper->{$data['diameter_field']}->value();
+    if ($wrapper && property_exists($parent_node, $data['dimensions']['diameter_field'])) {
+      if ($wrapper->{$data['dimensions']['diameter_field']}->value()) {
+        $physical_width = $wrapper->{$data['dimensions']['diameter_field']}->value();
+        $physical_height = $wrapper->{$data['dimensions']['diameter_field']}->value();
+      }
     }
   }
   if ($physical_width) {
@@ -172,7 +193,7 @@ function agile_iit_image_resize_resize_effect(&$image, $data) {
   if (!$physical_height && $scaled_width) {
     $scaled_height = $image->info['height'] / $image->info['width'] * $scaled_width;
   }
-  // USe defaults if  no dimensions are available.
+  // Use defaults if  no dimensions are available.
   if (!$physical_height && !$physical_width) {
     $scaled_width = $data['default_width'] * $data['scale_factor'];
     $scaled_height = $scaled_width * $image->info['height'] / $image->info['width'];
